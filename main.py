@@ -1,4 +1,3 @@
-import time
 from bs4 import BeautifulSoup
 import requests
 import re
@@ -19,19 +18,16 @@ app.add_middleware(
 )
 
 # Realizar el scraping una vez al iniciar la aplicación
-scraped_data = None
+data = {'revistas': [], 'noticias': []}
 
 def perform_scraping():
-    global scraped_data
+    global data
     url = "https://contraplano.cl/"
 
     response = requests.get(url)
     html = response.text
 
     soup = BeautifulSoup(html, 'html.parser')
-
-    news_data = []
-    news_without_images = []
 
     link_divs = soup.find_all('div', class_=re.compile(r'.*category-*'))
 
@@ -41,44 +37,44 @@ def perform_scraping():
         bg_image_url = bg_image_element.get('data-wixi-bg-src') if bg_image_element else None
         heading = link_div.find('h3', class_='post--heading').text.strip()
 
-        # Buscar el contenido de post--excerpt dentro de la etiqueta <p>
-        excerpt_paragraph = link_div.find('p', class_='post--excerpt')
-        excerpt = excerpt_paragraph.get_text(strip=True) if excerpt_paragraph else None
+        if 'category-revistas' in link_div['class']:
+            noscript_element = link_div.find('noscript')  # Encuentra la etiqueta <noscript>
+            if noscript_element:
+                noscript_content = noscript_element.decode_contents()  # Obtiene el contenido de <noscript>
+                noscript_soup = BeautifulSoup(noscript_content, 'html.parser')  # Analiza el contenido de <noscript>
+                img_element_inside_noscript = noscript_soup.find('img')  # Busca la etiqueta img dentro de <noscript>
 
-        if bg_image_url is None:
-            news_without_images.append({
-                'link': link,
-                'heading': heading,
-                'excerpt': excerpt
-            })
+                if img_element_inside_noscript:
+                    img_src = img_element_inside_noscript.get('src')  # Obtiene el atributo src de la etiqueta img
+                    # Verifica si el atributo src comienza con "https://i0.wp.com"
+                    if img_src and img_src.startswith("https://i0.wp.com"):
+                        data['revistas'].append({
+                            'link': link,
+                            'image': img_src,
+                            'heading': heading
+                        })
         else:
-            news_data.append({
-                'link': link,
-                'image': bg_image_url,
-                'heading': heading,
-                'excerpt': excerpt
-            })
+            excerpt_paragraph = link_div.find('p', class_='post--excerpt')
+            excerpt = excerpt_paragraph.get_text(strip=True) if excerpt_paragraph else None
 
-    scraped_data = {
-        'news_with_images': news_data,
-        'news_without_images': news_without_images
-    }
+            if bg_image_url is None:
+                data['noticias'].append({
+                    'link': link,
+                    'heading': heading,
+                    'excerpt': excerpt
+                })
+            else:
+                data['noticias'].append({
+                    'link': link,
+                    'image': bg_image_url,
+                    'heading': heading,
+                    'excerpt': excerpt
+                })
 
 # Ejecutar el scraping al iniciar la aplicación
 perform_scraping()
 
-@app.get("/scrape_news")
-def scrape_news():
-    global scraped_data
-    return scraped_data
-
-
-
-
-
-
-
-
-
-
-
+@app.get("/data")
+def get_data():
+    global data
+    return data
