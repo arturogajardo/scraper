@@ -47,7 +47,4 @@ async def delete_revista(revista_id: int):
 
     return {"message": f"Revista con ID {revista_id} eliminada"}
 
-if __name__ == "__main__":
-    import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8000)
 
