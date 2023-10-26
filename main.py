@@ -1,13 +1,11 @@
-from bs4 import BeautifulSoup
-import requests
-import re
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
+from pydantic import BaseModel
+from database import database, Revista
 from fastapi.middleware.cors import CORSMiddleware
 
 app = FastAPI()
 
-# Configuración de CORS para permitir todas las solicitudes desde cualquier origen
-origins = ["*"]
+origins = ["http://localhost:8100"]  # Reemplaza esto con la URL de tu aplicación Ionic
 
 app.add_middleware(
     CORSMiddleware,
@@ -16,65 +14,40 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+class RevistaCreate(BaseModel):
+    link: str
+    image: str
+    titulo: str
 
-# Realizar el scraping una vez al iniciar la aplicación
-data = {'revistas': [], 'noticias': []}
+@app.post("/upload/")
+async def upload_revista(revista: RevistaCreate):
+    query = Revista.insert().values(
+        link=revista.link,
+        image=revista.image,
+        titulo=revista.titulo
+    )
+    revista_id = await database.execute(query)
+    return {"message": "Revista guardada exitosamente", "revista_id": revista_id}
 
-def perform_scraping():
-    global data
-    url = "https://contraplano.cl/"
+@app.get("/revistas/")
+async def get_revistas():
+    query = Revista.select()
+    revistas = await database.fetch_all(query)
+    revistas_list = [dict(rv) for rv in revistas]
+    return revistas_list
 
-    response = requests.get(url)
-    html = response.text
+@app.delete("/revistas/{revista_id}")
+async def delete_revista(revista_id: int):
+    # Busca la revista en la base de datos
+    query = Revista.delete().where(Revista.c.id == revista_id)
+    result = await database.execute(query)
 
-    soup = BeautifulSoup(html, 'html.parser')
+    if result == 0:
+        raise HTTPException(status_code=404, detail="Revista no encontrada")
 
-    link_divs = soup.find_all('div', class_=re.compile(r'.*category-*'))
+    return {"message": f"Revista con ID {revista_id} eliminada"}
 
-    for link_div in link_divs:
-        link = link_div.find('a', class_='post--link')['href']
-        bg_image_element = link_div.find('div', class_='post--bg-image')
-        bg_image_url = bg_image_element.get('data-wixi-bg-src') if bg_image_element else None
-        heading = link_div.find('h3', class_='post--heading').text.strip()
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run(app, host="0.0.0.0", port=8000)
 
-        if 'category-revistas' in link_div['class']:
-            noscript_element = link_div.find('noscript')  # Encuentra la etiqueta <noscript>
-            if noscript_element:
-                noscript_content = noscript_element.decode_contents()  # Obtiene el contenido de <noscript>
-                noscript_soup = BeautifulSoup(noscript_content, 'html.parser')  # Analiza el contenido de <noscript>
-                img_element_inside_noscript = noscript_soup.find('img')  # Busca la etiqueta img dentro de <noscript>
-
-                if img_element_inside_noscript:
-                    img_src = img_element_inside_noscript.get('src')  # Obtiene el atributo src de la etiqueta img
-                    # Verifica si el atributo src comienza con "https://i0.wp.com"
-                    if img_src and img_src.startswith("https://i0.wp.com"):
-                        data['revistas'].append({
-                            'link': link,
-                            'image': img_src,
-                            'heading': heading
-                        })
-        else:
-            excerpt_paragraph = link_div.find('p', class_='post--excerpt')
-            excerpt = excerpt_paragraph.get_text(strip=True) if excerpt_paragraph else None
-
-            if bg_image_url is None:
-                data['noticias'].append({
-                    'link': link,
-                    'heading': heading,
-                    'excerpt': excerpt
-                })
-            else:
-                data['noticias'].append({
-                    'link': link,
-                    'image': bg_image_url,
-                    'heading': heading,
-                    'excerpt': excerpt
-                })
-
-# Ejecutar el scraping al iniciar la aplicación
-perform_scraping()
-
-@app.get("/data")
-def get_data():
-    global data
-    return data
