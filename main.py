@@ -5,7 +5,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 app = FastAPI()
 
-origins = ["http://localhost:8100"]  # Reemplaza esto con la URL de tu aplicación Ionic
+origins = ["*"]  # Reemplaza esto con la URL de tu aplicación Ionic
 
 app.add_middleware(
     CORSMiddleware,
