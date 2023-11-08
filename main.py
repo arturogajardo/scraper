@@ -5,7 +5,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 app = FastAPI()
 
-origins = ["*"]  # Reemplaza esto con la URL de tu aplicación Ionic
+origins = ["*"]  
 
 app.add_middleware(
     CORSMiddleware,
@@ -38,7 +38,6 @@ async def get_revistas():
 
 @app.delete("/revistas/{revista_id}")
 async def delete_revista(revista_id: int):
-    # Busca la revista en la base de datos
     query = Revista.delete().where(Revista.c.id == revista_id)
     result = await database.execute(query)
 
